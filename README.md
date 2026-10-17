@@ -59,6 +59,12 @@ It also starts and stops the daemon, which the Web GUI cannot do.
   folders finishing or failing, and new invites
 - Optional bar label showing transfer rate, overall completion, or connected
   device count
+- **About** — the 󰋽 button in the panel header (or `i` in the panel, or
+  `omarchy-shell ninepointlabs.omasync about`) shows the version, the license
+  (readable in place), Nine Point Labs, what the widget does with your data, the
+  Quickshell, Qt and Syncthing versions, and the support address,
+  [help@ninepointlabs.com](mailto:help@ninepointlabs.com), with *Email*, *Copy*
+  and *Copy version details* buttons. Back or `esc` returns to the panel
 
 ## In the bar
 
@@ -138,8 +144,9 @@ Inside the panel:
 | `c` | Copy the selected device's ID, the selected folder's path, or this machine's ID |
 | `g` | Open the Web GUI |
 | `x` | Clear Syncthing's error list |
+| `i` | Show or leave the About page |
 | `tab` | Move to the next bar panel |
-| `esc` | Close |
+| `esc` | Close (on the About page: back to the panel) |
 
 ## Settings
 
@@ -163,6 +170,7 @@ omarchy-shell ninepointlabs.omasync restart
 omarchy-shell ninepointlabs.omasync rescan
 omarchy-shell ninepointlabs.omasync status      # "Up to date", "Syncing 2 folders", …
 omarchy-shell ninepointlabs.omasync deviceId
+omarchy-shell ninepointlabs.omasync about       # open the panel on its About page
 ```
 
 ## How it works
@@ -196,7 +204,9 @@ rate of its own.
 ```
 
 That runs the Omarchy manifest validator, the bridge's Python tests, the
-model's node tests, and a QML syntax check.
+model's node tests, and a QML syntax check. The tests also check the About
+page's facts against `manifest.json`, `LICENSE` and the first commit, and fail
+if the code gains a network address its privacy statement does not name.
 
 `Model.js` holds all the presentation logic as plain functions over plain data,
 so it can be exercised from node without a running shell.

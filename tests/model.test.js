@@ -343,3 +343,59 @@ test("notificationText keeps a remote name out of option position", () => {
   assert.equal(Model.notificationText(""), "")
   assert.equal(Model.notificationText(undefined), "")
 })
+
+test("About facts come from the repo's own files", () => {
+  const fs = require("node:fs")
+  const path = require("node:path")
+  const { execFileSync } = require("node:child_process")
+  const root = path.join(__dirname, "..")
+  const manifestText = fs.readFileSync(path.join(root, "manifest.json"), "utf8")
+  const manifest = JSON.parse(manifestText)
+  assert.equal(Model.manifestVersion(manifestText), manifest.version)
+  assert.equal(Model.manifestVersion("not json"), "")
+  assert.equal(Model.manifestVersion('{"version":"1.0 <b>"}'), "")
+  assert.equal(manifest.author, "Nine Point Labs")
+  assert.equal(Model.ABOUT.name, manifest.name)
+  assert.equal(Model.ABOUT.organization, "Nine Point Labs")
+  assert.equal(Model.ABOUT.supportEmail, "help@ninepointlabs.com")
+
+  const license = fs.readFileSync(path.join(root, "LICENSE"), "utf8")
+  assert.ok(license.startsWith(Model.ABOUT.license))
+  assert.ok(license.includes(Model.ABOUT.copyright.replace("©", "Copyright (c)")))
+  const reflowed = Model.reflowLicense(license)
+  assert.ok(reflowed.startsWith("MIT License\n\nCopyright (c) 2026 Nine Point Labs\n\nPermission is hereby granted"))
+  assert.ok(!reflowed.includes("a copy\nof"))
+
+  // Created is the month of the first commit (skipped in a shallow clone).
+  let first = ""
+  try {
+    first = execFileSync("git", ["log", "--reverse", "--format=%ad", "--date=format:%B %Y"],
+      { cwd: root, encoding: "utf8" }).split("\n")[0]
+  } catch (e) {}
+  const shallow = (() => { try { return execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: root, encoding: "utf8" }).trim() === "true" } catch (e) { return true } })()
+  if (first && !shallow) assert.equal(Model.ABOUT.created, first)
+})
+
+test("About versions, support email and privacy", () => {
+  assert.equal(Model.probedVersion((major, minor) => major === 6 && minor <= 11, 6), "6.11")
+  assert.equal(Model.probedVersion((major, minor) => major === 0 && minor <= 3, 0), "0.3")
+  assert.equal(Model.probedVersion(() => false, 6), "")
+  assert.equal(Model.probedVersion(null, 6), "")
+
+  assert.equal(Model.builtWith("0.3", "6.11", "v2.0.10"), "Quickshell 0.3, Qt 6.11, Syncthing 2.0.10")
+  assert.equal(Model.builtWith("0.3", "6.11", ""), "Quickshell 0.3, Qt 6.11")
+  assert.equal(Model.builtWith("", "", "v2 <b>"), "")
+
+  const details = Model.aboutDetails("0.1.0", "0.3", "6.11", "v2.0.10", "Hyprland, wayland")
+  assert.equal(details, "OmaSyncthing 0.1.0\nQuickshell 0.3, Qt 6.11, Syncthing 2.0.10\nHyprland, wayland")
+  assert.equal(Model.aboutDetails("", "", "", "", ""), "OmaSyncthing unknown version\nversions unknown\nunknown desktop")
+  const mail = Model.supportMailto("0.1.0", details)
+  assert.ok(mail.startsWith("mailto:help@ninepointlabs.com?subject=OmaSyncthing%200.1.0&body="))
+  assert.equal(decodeURIComponent(mail.split("&body=")[1]), "\n\n--\n" + details)
+
+  assert.match(Model.PRIVACY, /no telemetry/)
+  assert.match(Model.PRIVACY, /127\.0\.0\.1:8384/)
+  assert.match(Model.PRIVACY, /X-API-Key/)
+  assert.match(Model.PRIVACY, /Syncthing's own behaviour/)
+  assert.match(Model.PRIVACY, /~\/\.config\/omarchy\/shell\.json/)
+})
