@@ -62,6 +62,47 @@ Panel {
     ? ""
     : Model.barLabelText(barLabelMode, root.syncthing.snapshot, root.syncthing.inRate, root.syncthing.outRate)
 
+  // ---------------------------------------------------------------- about
+
+  // The About page replaces the panel's content in place (info button, `i`,
+  // or the `about` IPC call); Back, Esc or closing the panel leaves it. Its
+  // facts are read from this plugin's own files, only once it is shown.
+  property bool showAbout: false
+  property bool showLicense: false
+  property string copiedLabel: ""
+
+  readonly property string pluginDir: Model.fileUrlPath(Qt.resolvedUrl("."))
+  readonly property string version: Model.manifestVersion(manifestFile.loaded ? manifestFile.text() : "")
+  readonly property string quickshellVersion: Model.probedVersion(function(a, b) { return Quickshell.hasVersion(a, b) }, 0)
+  readonly property string qtVersion: Model.probedVersion(function(a, b) { return Quickshell.hasQtVersion(a, b) }, 6)
+  readonly property string syncthingVersion: String(root.syncthing.snapshot.version || "")
+  readonly property string aboutDetails: Model.aboutDetails(root.version, root.quickshellVersion, root.qtVersion,
+    root.syncthingVersion, (Quickshell.env("XDG_CURRENT_DESKTOP") || "unknown desktop") + ", " + Qt.platform.pluginName)
+
+  FileView { id: manifestFile; path: root.showAbout ? root.pluginDir + "/manifest.json" : ""; printErrors: false }
+  FileView { id: licenseFile; path: root.showLicense ? root.pluginDir + "/LICENSE" : ""; printErrors: false }
+
+  function showAboutPage() {
+    showLicense = false
+    showAbout = true
+    cursorActive = false
+    if (panelFlick) panelFlick.contentY = 0
+  }
+
+  function hideAboutPage() {
+    showAbout = false
+    showLicense = false
+    if (panelFlick) panelFlick.contentY = 0
+  }
+
+  function copyText(text, label) {
+    Quickshell.clipboardText = text
+    copiedLabel = label
+    copiedTimer.restart()
+  }
+
+  Timer { id: copiedTimer; interval: 1500; onTriggered: root.copiedLabel = "" }
+
   readonly property string toggleHint: root.syncthing.externallyManaged
     ? "Stop Syncthing (started outside systemd)"
     : (root.syncthing.serviceRunning ? "Stop the Syncthing service" : "Start the Syncthing service")
@@ -192,6 +233,10 @@ Panel {
   // the whole installation when the row does not have its own meaning.
   function handleTextKey(key) {
     var lower = String(key || "").toLowerCase()
+    if (lower === "i") { showAbout ? hideAboutPage() : showAboutPage(); return }
+    // On the About page the letters do nothing, so a stray `t` cannot stop
+    // Syncthing behind it.
+    if (showAbout) return
     var folder = selectedFolder()
     var device = selectedDevice()
     if (lower === "t") root.syncthing.toggleService()
@@ -216,7 +261,12 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onOpenedChanged: if (opened) {
+  onOpenedChanged: {
+    if (!opened) {
+      showAbout = false
+      showLicense = false
+      return
+    }
     cursorActive = false
     cursor = 0
     if (panelFlick) panelFlick.contentY = 0
@@ -248,6 +298,7 @@ Panel {
     function rescan(): string { root.syncthing.rescanAll(); return "ok" }
     function status(): string { return root.syncthing.stateLabel }
     function deviceId(): string { return root.syncthing.myId }
+    function about(): void { root.open(); root.showAboutPage() }
   }
 
   // ------------------------------------------------------------------ bar
@@ -312,17 +363,19 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(400))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(620))
+    contentHeight: panel.fittedContentHeight(panelFlick.contentHeight, Style.space(620))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
+        if (root.showAbout) return
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
-      onActivateRequested: if (root.cursorActive) root.activateCursor()
-      onCloseRequested: root.close()
+      onActivateRequested: if (root.cursorActive && !root.showAbout) root.activateCursor()
+      // Esc steps back out of About before it closes the panel.
+      onCloseRequested: root.showAbout ? root.hideAboutPage() : root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(text) { root.handleTextKey(text) }
 
@@ -330,7 +383,7 @@ Panel {
         id: panelFlick
         anchors.fill: parent
         contentWidth: width
-        contentHeight: column.implicitHeight
+        contentHeight: root.showAbout ? aboutColumn.implicitHeight : column.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
@@ -339,6 +392,7 @@ Panel {
 
         Column {
           id: column
+          visible: !root.showAbout
           width: panelFlick.width
           spacing: Style.space(12)
 
@@ -354,6 +408,7 @@ Panel {
             readonly property bool canToggle: root.syncthing.unitExists || root.syncthing.externallyManaged
             function focusHero() { root.setCursor("header", 0) }
             function toggle() { root.syncthing.toggleService() }
+            function about() { root.showAboutPage() }
 
             Component.onCompleted: root.registerRow("header", 0, header)
 
@@ -377,20 +432,35 @@ Panel {
               }
 
               trailingControl: Component {
-                ToggleSwitch {
-                  id: powerSwitch
-                  visible: header.canToggle
-                  checked: root.syncthing.serviceRunning
-                  busy: root.syncthing.busy
-                  hasCursor: header.ringVisible
-                  foreground: hero.foreground
-                  onHovered: function(on) { if (on) header.focusHero() }
-                  onToggled: header.toggle()
+                Row {
+                  spacing: Style.space(10)
 
-                  PanelToolTip {
-                    visible: powerSwitch.containsMouse
-                    text: root.toggleHint
+                  PanelActionButton {
+                    objectName: "aboutButton"
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: "󰋽"
+                    tooltipText: "About OmaSyncthing (i)"
+                    foreground: hero.foreground
                     fontFamily: hero.fontFamily
+                    onClicked: header.about()
+                  }
+
+                  ToggleSwitch {
+                    id: powerSwitch
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: header.canToggle
+                    checked: root.syncthing.serviceRunning
+                    busy: root.syncthing.busy
+                    hasCursor: header.ringVisible
+                    foreground: hero.foreground
+                    onHovered: function(on) { if (on) header.focusHero() }
+                    onToggled: header.toggle()
+
+                    PanelToolTip {
+                      visible: powerSwitch.containsMouse
+                      text: root.toggleHint
+                      fontFamily: hero.fontFamily
+                    }
                   }
                 }
               }
@@ -588,8 +658,189 @@ Panel {
             }
           }
         }
+
+        // -------------------------------------------------------- about
+
+        Column {
+          id: aboutColumn
+          objectName: "aboutColumn"
+          visible: root.showAbout
+          width: panelFlick.width
+          spacing: Style.space(12)
+
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(aboutTitle.implicitHeight, aboutBack.implicitHeight)
+
+            SyncthingIcon {
+              id: aboutIcon
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              iconSize: Style.font.display
+              color: root.accent
+            }
+
+            Column {
+              id: aboutTitle
+              anchors.left: aboutIcon.right
+              anchors.leftMargin: Style.space(14)
+              anchors.right: aboutBack.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(2)
+
+              Text {
+                textFormat: Text.PlainText
+                text: Model.ABOUT.name
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.title
+                font.bold: true
+              }
+              AboutText { width: parent.width; text: Model.ABOUT.tagline; color: root.dim }
+              AboutText {
+                objectName: "aboutVersion"
+                text: "Version " + (root.version || "unknown")
+                color: root.dim
+                font.pixelSize: Style.font.caption
+              }
+            }
+
+            PanelActionButton {
+              id: aboutBack
+              objectName: "aboutBack"
+              anchors.right: parent.right
+              anchors.top: parent.top
+              iconText: "󰁍"
+              tooltipText: "Back (Esc)"
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: root.hideAboutPage()
+            }
+          }
+
+          PanelSeparator { foreground: root.foreground }
+
+          Grid {
+            id: aboutFacts
+            width: parent.width
+            columns: 2
+            columnSpacing: Style.space(10)
+            rowSpacing: Style.space(10)
+            readonly property real labelWidth: Style.space(78)
+            readonly property real valueWidth: width - labelWidth - columnSpacing
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "MADE BY" }
+            AboutText { width: aboutFacts.valueWidth; text: Model.ABOUT.organization }
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "CREATED" }
+            AboutText { width: aboutFacts.valueWidth; text: Model.ABOUT.created }
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "LICENSE" }
+            Column {
+              width: aboutFacts.valueWidth
+              spacing: Style.space(4)
+              AboutText { width: parent.width; text: Model.ABOUT.license + ", " + Model.ABOUT.copyright }
+              Button {
+                objectName: "aboutLicenseLink"
+                text: root.showLicense ? "Hide license" : "Read license"
+                foreground: root.foreground
+                accent: root.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onClicked: root.showLicense = !root.showLicense
+              }
+            }
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "SUPPORT" }
+            Column {
+              width: aboutFacts.valueWidth
+              spacing: Style.space(4)
+              AboutText { width: parent.width; text: Model.ABOUT.supportEmail }
+              Flow {
+                width: parent.width
+                spacing: Style.space(6)
+                Button {
+                  text: "Email"
+                  tooltipText: "Opens your mail app with the version details filled in"
+                  bordered: true
+                  foreground: root.foreground
+                  accent: root.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onClicked: Qt.openUrlExternally(Model.supportMailto(root.version, root.aboutDetails))
+                }
+                Button {
+                  objectName: "aboutCopyEmail"
+                  text: root.copiedLabel === "email" ? "Copied" : "Copy"
+                  bordered: true
+                  foreground: root.foreground
+                  accent: root.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onClicked: root.copyText(Model.ABOUT.supportEmail, "email")
+                }
+                Button {
+                  text: root.copiedLabel === "details" ? "Copied" : "Copy version details"
+                  bordered: true
+                  foreground: root.foreground
+                  accent: root.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onClicked: root.copyText(root.aboutDetails, "details")
+                }
+              }
+            }
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "PRIVACY" }
+            AboutText {
+              objectName: "aboutPrivacy"
+              width: aboutFacts.valueWidth
+              text: Model.PRIVACY
+              font.pixelSize: Style.font.caption
+            }
+
+            AboutLabel { width: aboutFacts.labelWidth; text: "BUILT WITH" }
+            AboutText {
+              objectName: "aboutBuiltWith"
+              width: aboutFacts.valueWidth
+              text: Model.builtWith(root.quickshellVersion, root.qtVersion, root.syncthingVersion) || "Quickshell and Qt"
+              color: root.dim
+              font.pixelSize: Style.font.caption
+            }
+          }
+
+          AboutText {
+            objectName: "aboutLicenseText"
+            visible: root.showLicense
+            width: parent.width
+            text: licenseFile.loaded ? Model.reflowLicense(licenseFile.text())
+              : Model.ABOUT.license + ", " + Model.ABOUT.copyright
+            color: root.dim
+            font.pixelSize: Style.font.caption
+          }
+        }
       }
     }
+  }
+
+  // ---------------------------------------------------------- about text
+
+  component AboutLabel: Text {
+    textFormat: Text.PlainText
+    color: root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+    font.bold: true
+    font.letterSpacing: 1.2
+  }
+
+  component AboutText: Text {
+    textFormat: Text.PlainText
+    color: root.foreground
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    wrapMode: Text.WordWrap
   }
 
   // ------------------------------------------------------------ row types

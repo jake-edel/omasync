@@ -416,6 +416,82 @@ function fileUrlPath(url) {
   return text.replace(/\/+$/, "")
 }
 
+// ------------------------------------------------------------------ about
+
+// The facts that live nowhere else. The version is read from manifest.json and
+// the license text from LICENSE at runtime, so neither is copied here.
+var ABOUT = {
+  name: "OmaSyncthing",
+  tagline: "Syncthing folders, devices, transfer rates and share invites in the Omarchy bar",
+  organization: "Nine Point Labs",
+  supportEmail: "help@ninepointlabs.com",
+  created: "September 2026", // first commit: 2026-09-25
+  license: "MIT License",
+  copyright: "© 2026 Nine Point Labs" // as written in LICENSE
+}
+
+// Must stay true to bin/omasync-bridge, the only code that opens a connection
+// (tests/bridge_test.py fails if a host appears there without being named here).
+var PRIVACY = "No account and no telemetry. The widget talks only to your own Syncthing's REST API, at the "
+  + "GUI address in Syncthing's config.xml: 127.0.0.1:8384 unless you changed it, and a wildcard bind such "
+  + "as 0.0.0.0 is dialled on 127.0.0.1. Proxy settings are ignored. Its helper reads the API key from that "
+  + "config.xml each time it runs and sends it only as the X-API-Key header of those calls; the key is never "
+  + "saved, copied, logged, shown or put on a command line. Syncing with your devices, global discovery and "
+  + "relays are Syncthing's own behaviour under your Syncthing settings, not the widget's. It keeps no state "
+  + "of its own beyond its entry in ~/.config/omarchy/shell.json."
+
+// "0.1.0" from manifest.json's text, or "" if it cannot be read.
+function manifestVersion(text) {
+  var parsed
+  try { parsed = JSON.parse(String(text || "")) } catch (e) { return "" }
+  var version = parsed && typeof parsed.version === "string" ? parsed.version : ""
+  return /^[0-9A-Za-z.+-]{1,32}$/.test(version) ? version : ""
+}
+
+// Highest minor version `has(major, minor)` accepts, as "major.minor"
+// (Quickshell.hasVersion / hasQtVersion only answer yes or no), or "".
+function probedVersion(has, major) {
+  if (typeof has !== "function" || !has(major, 0)) return ""
+  var minor = 0
+  while (minor < 99 && has(major, minor + 1)) minor++
+  return major + "." + minor
+}
+
+// One paragraph per line, so the license wraps to the panel width.
+function reflowLicense(text) {
+  var paragraphs = String(text || "").replace(/\r/g, "").split(/\n\s*\n/)
+  var out = []
+  for (var i = 0; i < paragraphs.length; i++) {
+    var p = paragraphs[i].replace(/\s+/g, " ").trim()
+    if (p !== "") out.push(p)
+  }
+  return out.join("\n\n")
+}
+
+// "Quickshell 0.3, Qt 6.11, Syncthing 2.0.10"; Syncthing only once the
+// running daemon has reported its version.
+function builtWith(quickshell, qt, syncthing) {
+  var built = []
+  if (quickshell) built.push("Quickshell " + quickshell)
+  if (qt) built.push("Qt " + qt)
+  var st = String(syncthing || "").replace(/^v/, "")
+  if (/^[0-9A-Za-z.+-]{1,32}$/.test(st)) built.push("Syncthing " + st)
+  return built.join(", ")
+}
+
+// Version details for a support email.
+function aboutDetails(version, quickshell, qt, syncthing, desktop) {
+  var built = builtWith(quickshell, qt, syncthing)
+  return ABOUT.name + " " + (version || "unknown version") + "\n"
+    + (built || "versions unknown") + "\n"
+    + (desktop || "unknown desktop")
+}
+
+function supportMailto(version, details) {
+  return "mailto:" + ABOUT.supportEmail + "?subject=" + encodeURIComponent(ABOUT.name + " " + (version || ""))
+    + "&body=" + encodeURIComponent("\n\n--\n" + details)
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     formatBytes: formatBytes,
@@ -443,6 +519,14 @@ if (typeof module !== "undefined" && module.exports) {
     notifiableChanges: notifiableChanges,
     notificationText: notificationText,
     parseBridge: parseBridge,
-    fileUrlPath: fileUrlPath
+    fileUrlPath: fileUrlPath,
+    ABOUT: ABOUT,
+    PRIVACY: PRIVACY,
+    manifestVersion: manifestVersion,
+    probedVersion: probedVersion,
+    reflowLicense: reflowLicense,
+    builtWith: builtWith,
+    aboutDetails: aboutDetails,
+    supportMailto: supportMailto
   }
 }

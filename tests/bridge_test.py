@@ -333,5 +333,71 @@ class GuiTlsTest(unittest.TestCase):
         self.assertIsNone(self.context_for("https://127.0.0.1:8384", "junk"))
 
 
+class AboutPrivacyTest(unittest.TestCase):
+    """The About page's privacy statement must name every address the code dials."""
+
+    def privacy_and_sources(self):
+        with open(os.path.join(ROOT, "Model.js"), encoding="utf-8") as handle:
+            model = handle.read()
+        start, end = model.index("var PRIVACY"), model.index("function manifestVersion")
+        privacy = model[start:end]
+        sources = {"Model.js": model[:start] + model[end:]}
+        names = [n for n in os.listdir(ROOT) if n.endswith((".qml", ".js")) and n != "Model.js"]
+        names += [os.path.join("bin", n) for n in os.listdir(os.path.join(ROOT, "bin"))]
+        for name in names:
+            with open(os.path.join(ROOT, name), encoding="utf-8") as handle:
+                sources[name] = handle.read()
+        return privacy, sources
+
+    def test_every_host_in_the_code_is_named_in_the_privacy_text(self):
+        import re
+
+        privacy, sources = self.privacy_and_sources()
+        pattern = re.compile(
+            r"[A-Za-z][A-Za-z0-9+.-]*://([^/\s\"'%)<>]+)"  # scheme://host
+            r"|\b(\d{1,3}(?:\.\d{1,3}){3})\b"  # IPv4 literal
+            r"|\b(localhost)\b"
+        )
+        hosts = set()
+        for name, text in sources.items():
+            for match in pattern.finditer(text):
+                host = next(g for g in match.groups() if g)
+                hosts.add(host.rsplit(":", 1)[0] if host.count(":") == 1 else host)
+        self.assertIn("127.0.0.1", hosts)  # the scan does see the bridge's default
+        for host in sorted(hosts):
+            self.assertIn(host, privacy, "%s is dialled but not named in the About privacy text" % host)
+
+    def test_only_the_bridge_can_open_a_connection(self):
+        import re
+
+        _, sources = self.privacy_and_sources()
+        for name, text in sources.items():
+            if name == os.path.join("bin", "omasync-bridge"):
+                continue
+            self.assertIsNone(
+                re.search(r"XMLHttpRequest|WebSocket|NetworkAccessManager|\bfetch\(", text),
+                "%s opens a network connection of its own" % name,
+            )
+        bridge_source = sources[os.path.join("bin", "omasync-bridge")]
+        self.assertNotRegex(bridge_source, r"import (socket|http\.client|ftplib|smtplib)")
+
+    def test_default_gui_address_is_the_one_the_privacy_text_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = os.path.join(tmp, "syncthing")
+            os.makedirs(directory)
+            with open(os.path.join(directory, "config.xml"), "w") as handle:
+                handle.write('<configuration><gui tls="false"><apikey>K</apikey></gui></configuration>')
+            original = dict(os.environ)
+            try:
+                os.environ["STCONFDIR"] = directory
+                base, key, _ = bridge.read_gui_config()
+            finally:
+                os.environ.clear()
+                os.environ.update(original)
+        self.assertEqual((base, key), ("http://127.0.0.1:8384", "K"))
+        privacy, _ = self.privacy_and_sources()
+        self.assertIn("127.0.0.1:8384", privacy)
+
+
 if __name__ == "__main__":
     unittest.main()
