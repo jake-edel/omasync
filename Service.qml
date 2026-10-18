@@ -305,7 +305,7 @@ Item {
 
   function openGui() {
     if (guiUrl === "") return
-    Quickshell.execDetached(["xdg-open", guiUrl])
+    Quickshell.execDetached(["omarchy-launch-webapp", guiUrl])
   }
 
   function openFolder(folder) {

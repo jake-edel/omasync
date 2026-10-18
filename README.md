@@ -81,8 +81,8 @@ you. When the service is stopped it is struck through:
 
 - `syncthing` — `omarchy pkg add syncthing`
 - `/usr/bin/python3` — part of a base Arch install
-- `wl-clipboard` for the copy actions, `xdg-open` for opening folders and the
-  Web GUI
+- `wl-clipboard` for the copy actions, `xdg-open` for opening folders,
+  `omarchy-launch-webapp` for opening the Web GUI
 
 Syncthing does not need to be running, configured, or ever started: the panel
 renders a sensible first-run state, and the header switch will start it.
@@ -221,8 +221,8 @@ keep rendering the old logic against new data until you restart.
 
 - The only program the plugin runs is `bin/omasync-bridge`, invoked by absolute
   path under `/usr/bin/python3 -I -S`. Everything it starts (`systemctl`,
-  `xdg-open`, `wl-copy`, `omarchy-notification-send`) is spawned as an argument
-  vector, never through a shell.
+  `xdg-open`, `omarchy-launch-webapp`, `wl-copy`, `omarchy-notification-send`)
+  is spawned as an argument vector, never through a shell.
 - No `sudo`, no `pkexec`, no sudoers policy, no privileged helper. The service
   controls use the per-user systemd manager only.
 - The Syncthing API key is read from your local `config.xml`, sent only as an
