@@ -252,7 +252,10 @@ Panel {
       else if (folder) root.syncthing.copyToClipboard(folder.path)
       else root.syncthing.copyMyId()
     }
-    else if (lower === "g") { root.syncthing.openGui(); close() }
+    else if (lower === "g") {
+      if (device && Model.deviceGuiUrl(device) !== "") { root.syncthing.openDeviceGui(device); close() }
+      else { root.syncthing.openGui(); close() }
+    }
     else if (lower === "x") root.syncthing.clearErrors()
   }
 
@@ -1050,6 +1053,16 @@ Panel {
           fontFamily: root.fontFamily
           onHovered: function(on) { if (on) root.setCursor("device", deviceRow.rowIndex) }
           onClicked: root.syncthing.copyToClipboard(deviceRow.device ? deviceRow.device.deviceID : "")
+        }
+
+        PanelActionButton {
+          iconText: "󰖟"
+          tooltipText: "Open Web GUI"
+          visible: Model.deviceGuiUrl(deviceRow.device) !== ""
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onHovered: function(on) { if (on) root.setCursor("device", deviceRow.rowIndex) }
+          onClicked: { root.syncthing.openDeviceGui(deviceRow.device); root.close() }
         }
 
         PanelActionButton {

@@ -42,6 +42,7 @@ It also starts and stops the daemon, which the Web GUI cannot do.
   transport and per-device completion
 - Pause and resume a device
 - Copy a device ID to the clipboard
+- Open a connected device's own Web GUI as a web app.
 
 **Invites**
 
@@ -142,7 +143,7 @@ Inside the panel:
 | `o` | Open the selected folder |
 | `v` | Revert local changes in the selected receive-only folder |
 | `c` | Copy the selected device's ID, the selected folder's path, or this machine's ID |
-| `g` | Open the Web GUI |
+| `g` | Open the selected device's Web GUI, if it has one; otherwise this machine's |
 | `x` | Clear Syncthing's error list |
 | `i` | Show or leave the About page |
 | `tab` | Move to the next bar panel |

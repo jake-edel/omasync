@@ -161,6 +161,31 @@ function deviceDetail(device) {
   return parts.join(" · ")
 }
 
+// The device's live connection address, stripped of its sync port.
+function hostFromAddress(address) {
+  var text = String(address || "").trim()
+  if (text === "") return ""
+  if (text.charAt(0) === "[") {
+    var close = text.indexOf("]")
+    return close > 1 ? text.slice(1, close) : ""
+  }
+  var colon = text.lastIndexOf(":")
+  return colon > 0 ? text.slice(0, colon) : ""
+}
+
+// Syncthing doesn't report a remote device's GUI address, only the host it's
+// reachable at, so this assumes the GUI lives on that host at Syncthing's
+// default port (8384)
+function deviceGuiUrl(device) {
+  if (!device || !device.connected || !device.address) return ""
+
+  var host = hostFromAddress(device.address)
+  if (host === "") return ""
+  // ":" means we have an IPv6 address, which needs brackets in a URL.
+  if (host.indexOf(":") !== -1) host = "[" + host + "]"
+  return "http://" + host + ":8384"
+}
+
 // ------------------------------------------------------------- aggregate
 
 // Whether a daemon is up at all. The unit is not the only way to run
@@ -438,7 +463,10 @@ var PRIVACY = "No account and no telemetry. The widget talks only to your own Sy
   + "config.xml each time it runs and sends it only as the X-API-Key header of those calls; the key is never "
   + "saved, copied, logged, shown or put on a command line. Syncing with your devices, global discovery and "
   + "relays are Syncthing's own behaviour under your Syncthing settings, not the widget's. It keeps no state "
-  + "of its own beyond its entry in ~/.config/omarchy/shell.json."
+  + "of its own beyond its entry in ~/.config/omarchy/shell.json. Opening a connected device's own Web GUI is "
+  + "a separate, explicit action: Syncthing never reports a remote GUI address, so the widget guesses one "
+  + "from that device's own connection address at Syncthing's default GUI port, 8384, over plain http, and "
+  + "hands it to your browser without itself making the request."
 
 // "0.1.0" from manifest.json's text, or "" if it cannot be read.
 function manifestVersion(text) {
@@ -508,6 +536,7 @@ if (typeof module !== "undefined" && module.exports) {
     folderCanRevert: folderCanRevert,
     deviceStatusLabel: deviceStatusLabel,
     deviceDetail: deviceDetail,
+    deviceGuiUrl: deviceGuiUrl,
     overallState: overallState,
     overallCompletion: overallCompletion,
     connectedDeviceCount: connectedDeviceCount,

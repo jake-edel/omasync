@@ -308,6 +308,12 @@ Item {
     Quickshell.execDetached(["omarchy-launch-webapp", guiUrl])
   }
 
+  function openDeviceGui(device) {
+    var url = Model.deviceGuiUrl(device)
+    if (url === "") return
+    Quickshell.execDetached(["omarchy-launch-webapp", url])
+  }
+
   function openFolder(folder) {
     if (!folder || !folder.path) return
     Quickshell.execDetached(["xdg-open", String(folder.path)])

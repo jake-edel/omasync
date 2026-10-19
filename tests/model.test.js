@@ -293,6 +293,27 @@ test("deviceStatusLabel and deviceDetail describe the connection", () => {
   assert.equal(Model.deviceDetail(device()), "192.168.1.5:22000 · tcp Client")
 })
 
+test("deviceGuiUrl guesses the device's own host at Syncthing's default GUI port", () => {
+  assert.equal(Model.deviceGuiUrl(device()), "http://192.168.1.5:8384")
+  // A bracketed IPv6 connection address.
+  assert.equal(
+    Model.deviceGuiUrl(device({ address: "[fe80::1]:22000" })),
+    "http://[fe80::1]:8384"
+  )
+})
+
+test("deviceGuiUrl refuses to guess when the address is not usable", () => {
+  assert.equal(Model.deviceGuiUrl(null), "")
+  assert.equal(Model.deviceGuiUrl(device({ connected: false })), "")
+  assert.equal(Model.deviceGuiUrl(device({ address: "" })), "")
+  assert.equal(Model.deviceGuiUrl(device({ address: "dynamic" })), "")
+  // A relay's address names the relay server, not the device itself.
+  assert.equal(
+    Model.deviceGuiUrl(device({ type: "relayClient", address: "203.0.113.9:22067" })),
+    ""
+  )
+})
+
 test("heroMeta summarises devices, folders and live rates", () => {
   const state = snapshot({
     devices: [device(), device({ deviceID: "b", connected: false })],
